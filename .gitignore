@@ -1,0 +1,10 @@
+# build output
+build/
+check_setup
+test_model
+vlbi_session
+*.o
+*.mod
+
+# SOFA is built locally from iausofa.org, not redistributed here
+lib/
