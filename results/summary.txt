@@ -1,0 +1,46 @@
+eop-combination-sim | Milestone 1: VLBI session simulation and EOP estimation
+==============================================================================
+Session       2026-05-04 17:00 UTC, 24.0 h, one scan every 3.0 min, cutoff 5.0 deg
+Network       6 stations: WETTZELL* WESTFORD KOKEE ISHIOKA HOBART26 HART15M   (* clock reference)
+Sources       342 in the catalog, 121 observed
+Observations  480 scans, 2888 delays, 20 parameters (5 EOP + 15 clock)
+Noise         white, 25.0 ps per delay
+
+Noise-free check: the estimates must equal the injected truth
+  largest |estimate - truth| / formal error:   EOP 1.4E-05   clocks 2.5E-05    PASS
+
+Run 1 of 200
+  Parameter      Injected   Estimated   Formal error   (Est - Inj) / formal
+  xp   [uas]      150.00      169.00          11.88                   1.60
+  yp   [uas]     -100.00      -99.09          11.48                   0.08
+  dUT1 [us]        15.00       16.14           0.59                   1.94
+  dX   [uas]       80.00       74.31           8.35                  -0.68
+  dY   [uas]      -60.00      -71.75           8.69                  -1.35
+  Post-fit residuals: WRMS 25.0 ps, sigma0 1.005
+
+  Station clocks relative to WETTZELL: estimate minus truth (formal error)
+  Station         offset [ps]         rate [ps/h]     quadratic [ps/h^2]
+  WESTFORD       -2.99 ( 1.69)      -0.088 (0.138)       0.0343 (0.0229)
+  KOKEE          -2.97 ( 2.20)      -0.105 (0.162)       0.0126 (0.0278)
+  ISHIOKA        -1.88 ( 1.83)       0.022 (0.137)      -0.0182 (0.0234)
+  HOBART26       -3.68 ( 2.68)      -0.181 (0.206)       0.0037 (0.0346)
+  HART15M         3.31 ( 2.44)      -0.031 (0.195)      -0.0041 (0.0321)
+
+  Correlations of the EOP estimates
+                xp      yp    dUT1      dX      dY
+    xp       1.000
+    yp       0.114   1.000
+    dUT1     0.377  -0.356   1.000
+    dX      -0.022   0.015  -0.019   1.000
+    dY       0.022   0.047   0.054  -0.024   1.000
+
+Monte Carlo over 200 noise realisations (error = estimate - truth)
+  Parameter    Mean error   RMS error   Mean formal error   RMS / formal
+  xp   [uas]       0.92       11.66               11.81           0.99
+  yp   [uas]       0.50       11.99               11.41           1.05
+  dUT1 [us]       -0.02        0.58                0.59           0.99
+  dX   [uas]       0.70        8.71                8.31           1.05
+  dY   [uas]      -0.48        7.95                8.64           0.92
+  Mean sigma0 0.999
+
+Files written to results/: schedule.txt, residuals_run1.txt, monte_carlo.txt

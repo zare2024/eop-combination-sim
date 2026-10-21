@@ -1,0 +1,28 @@
+&session
+  ! Settings for vlbi_session (Fortran namelist). Lines starting with ! are comments.
+
+  ! session start (UTC) and length
+  start_year = 2026, start_month = 5, start_day = 4, start_hour = 17, start_minute = 0
+  duration_h = 24.0
+  scan_interval_min = 3.0
+  elevation_cutoff_deg = 5.0
+
+  ! network: names as in data/position.cat; the clock reference must be one of them
+  station_names = 'WETTZELL', 'WESTFORD', 'KOKEE', 'ISHIOKA', 'HOBART26', 'HART15M'
+  clock_reference = 'WETTZELL'
+
+  ! simulated truth: offsets added to the C04 a priori EOP
+  ! order: xp, yp [uas], UT1-UTC [us], dX, dY [uas]
+  injected_eop = 150.0, -100.0, 15.0, 80.0, -60.0
+
+  ! white noise per delay, number of Monte Carlo runs, random seed
+  sigma_delay_ps = 25.0
+  n_monte_carlo = 200
+  seed = 2026
+
+  ! input and output
+  station_file = 'data/position.cat'
+  source_file  = 'data/source.cat.geodetic.good'
+  eop_file     = 'data/eopc04_2026-05.txt'
+  output_dir   = 'results'
+/
