@@ -1,12 +1,9 @@
-! test_model.f90
-! Checks of the building blocks, independent of the session simulation.
-! Run from the project folder with:  make test
-!
-!   1. the CIO-based rotation in frames equals SOFA's one-call iau_C2T06A
+! Tests of the building blocks, independent of the session simulation (make test):
+!   1. the step-by-step CIO-based rotation equals SOFA's one-call iau_C2T06A
 !   2. the numerical UT1 partial equals the analytic Earth-rotation formula
-!   3. a source placed in a station's zenith has an elevation of 90 deg
+!   3. a source in a station's zenith has an elevation of 90 deg
 !   4. EOP interpolation returns the tabulated value at a table epoch
-!   5. least squares: exact line fit, and v'Pv from the normal equations
+!   5. least squares: an exact line fit, and v'Pv from the normal equations
 !      equals the sum of the squared residuals
 
 program test_model
@@ -54,8 +51,8 @@ contains
     print '(a, t62, es10.2, 3x, a)', label, value, merge('PASS', 'FAIL', ok)
   end subroutine check
 
-  ! 1. Our step-by-step assembly (XYS06A, C2IXYS, ERA00, SP00, POM00, C2TCIO)
-  !    must reproduce iau_C2T06A, which takes another route through SOFA.
+  ! c2t_matrix builds the rotation from XYS06A, C2IXYS, ERA00, SP00, POM00 and
+  ! C2TCIO; iau_C2T06A gets there by another route through SOFA.
   subroutine test_rotation()
     real(dp) :: e(n_eop), r_ours(3, 3), r_sofa(3, 3)
     real(dp) :: utc1, utc2, tai1, tai2, tt1, tt2, ut11, ut12
@@ -74,11 +71,10 @@ contains
                maxval(abs(r_ours - r_sofa)), 0.0_dp, 1.0e-14_dp)
   end subroutine test_rotation
 
-  ! 2. A change of UT1 rotates the Earth about the CIP axis z_cip. In the
-  !    terrestrial frame the source direction then turns the other way:
-  !        dk/dUT1 = -omega * (z_cip x k)
-  !    so  dtau/dUT1 = (b . (z_cip x k)) * omega / c
-  !    with omega = dERA/dUT1 and z_cip the third column of the polar motion matrix.
+  ! A change of UT1 rotates the Earth about the CIP axis z_cip, so in the
+  ! terrestrial frame the source direction turns the other way:
+  !     dk/dUT1 = -omega * (z_cip x k),   dtau/dUT1 = (b . (z_cip x k)) * omega / c
+  ! with omega = dERA/dUT1 and z_cip the third column of the polar motion matrix.
   subroutine test_ut1_partial()
     real(dp), parameter :: omega = 2.0_dp * pi * 1.00273781191135448_dp / 86400.0_dp  ! rad per s of UT1
     real(dp) :: k_crs(3), k_trs(3), dr(3, 3, n_eop), rpom(3, 3), numeric, analytic
@@ -92,7 +88,7 @@ contains
                abs(numeric - analytic) / abs(analytic), 0.0_dp, 1.0e-6_dp)
   end subroutine test_ut1_partial
 
-  ! 3. Direction of the local zenith, taken into the celestial frame and back
+  ! the local zenith, taken into the celestial frame and back
   subroutine test_zenith()
     real(dp) :: up(3), r(3, 3), k_crs(3)
     up = local_vertical(wettzell)
@@ -102,7 +98,7 @@ contains
                elevation(up, matmul(r, k_crs)) / deg2rad, 90.0_dp, 1.0e-5_dp)
   end subroutine test_zenith
 
-  ! 4. At a table epoch the Lagrange weights are 0, 1, 0, 0
+  ! at a table epoch the Lagrange weights are 0, 1, 0, 0
   subroutine test_interpolation()
     real(dp) :: e(n_eop)
     e = interpolate_eop(table, table%mjd(6))
@@ -111,7 +107,7 @@ contains
                0.0_dp, 1.0e-15_dp)
   end subroutine test_interpolation
 
-  ! 5. Line fit l = a + b t (same data as check_setup)
+  ! line fit l = a + b t, with the same data as check_setup
   subroutine test_least_squares()
     real(dp), parameter :: t(6) = [0.0_dp, 1.0_dp, 2.0_dp, 3.0_dp, 4.0_dp, 5.0_dp]
     real(dp), parameter :: l(6) = [2.1_dp, 2.4_dp, 3.1_dp, 3.4_dp, 4.1_dp, 4.4_dp]

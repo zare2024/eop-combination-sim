@@ -1,15 +1,12 @@
-! lsq.f90
-! Least-squares adjustment (Gauss-Markov model) through normal equations.
+! Least-squares adjustment (Gauss-Markov model) through normal equations:
 !
-!   observation equations   l + v = A x        weights P = diag(w)
-!   normal equations        N x = b            N = A^T P A,   b = A^T P l
-!   solution                x = N^-1 b         cofactor matrix Q = N^-1
-!   residual sum            v^T P v = l^T P l - x^T b
+!   l + v = A x,   P = diag(w)
+!   N x = b,       N = A^T P A,   b = A^T P l,   Q = N^-1
+!   v^T P v = l^T P l - x^T b
 !
-! A system is kept as N, b and l^T P l rather than as A. That is the form in
-! which systems of different techniques can later be stacked (combination on
-! the normal equation level).
-
+! A system is kept as N, b and l^T P l rather than A. That is the form in which
+! the systems of different techniques can later be stacked (combination on the
+! normal equation level).
 module lsq
   use constants, only: dp
   implicit none
@@ -18,12 +15,12 @@ module lsq
 
   type :: normal_eq_t
     integer  :: n_par = 0, n_obs = 0
-    real(dp), allocatable :: n(:, :)     ! normal matrix A^T P A
-    real(dp), allocatable :: b(:)        ! right-hand side A^T P l
+    real(dp), allocatable :: n(:, :)     ! A^T P A
+    real(dp), allocatable :: b(:)        ! A^T P l
     real(dp) :: ltpl = 0.0_dp            ! l^T P l
   end type normal_eq_t
 
-  ! LAPACK routines for symmetric positive definite matrices (Cholesky)
+  ! LAPACK, Cholesky routines for symmetric positive definite matrices
   interface
     subroutine dpotrf(uplo, n, a, lda, info)
       character,        intent(in)    :: uplo
@@ -59,7 +56,7 @@ contains
     neq%b = 0.0_dp
   end subroutine neq_init
 
-  ! Add one observation: partials a, reduced observation l (observed minus computed), weight w
+  ! add one observation: partials a, observed minus computed l, weight w
   subroutine neq_add(neq, a, l, w)
     type(normal_eq_t), intent(inout) :: neq
     real(dp),          intent(in)    :: a(:), l, w
@@ -74,7 +71,7 @@ contains
     neq%n_obs = neq%n_obs + 1
   end subroutine neq_add
 
-  ! Solve N x = b by Cholesky decomposition N = U^T U; q receives N^-1.
+  ! Solves N x = b by the Cholesky decomposition N = U^T U and returns N^-1 in q.
   ! info > 0 means N is not positive definite: some parameter is not estimable.
   subroutine neq_solve(neq, x, q, info)
     type(normal_eq_t), intent(in)  :: neq
@@ -87,9 +84,9 @@ contains
     call dpotrf('U', n, q, n, info)          ! q now holds U
     if (info /= 0) return
     x = neq%b
-    call dpotrs('U', n, 1, q, n, x, n, info) ! forward and back substitution
+    call dpotrs('U', n, 1, q, n, x, n, info)
     if (info /= 0) return
-    call dpotri('U', n, q, n, info)          ! N^-1 from U, upper triangle only
+    call dpotri('U', n, q, n, info)          ! N^-1, upper triangle only
     do j = 1, n
       do i = j + 1, n
         q(i, j) = q(j, i)
@@ -97,7 +94,7 @@ contains
     end do
   end subroutine neq_solve
 
-  ! Weighted sum of squared residuals for the solution x, without forming v
+  ! v^T P v for the solution x, without forming the residuals
   pure function neq_vtpv(neq, x) result(vtpv)
     type(normal_eq_t), intent(in) :: neq
     real(dp),          intent(in) :: x(:)

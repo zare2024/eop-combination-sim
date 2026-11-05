@@ -1,13 +1,10 @@
-! scheduler.f90
-! A simple greedy scheduler. Every interval_min minutes it places one scan on
-! the source with the highest score among those that at least two stations
-! see above the elevation cutoff:
+! Greedy scheduler. Every interval_min minutes it puts one scan on the source with
+! the highest score among those that at least two stations see above the cutoff:
 !
 !   score = number of stations that see it + hours since it was last observed (at most 2)
 !
-! The first term favours many baselines per scan, the second spreads the
-! scans over the sky. Slewing, source flux and SNR are not modelled.
-
+! The first term favours many baselines per scan, the second spreads the scans
+! over the sky. Slewing, source flux and SNR are not modelled.
 module scheduler
   use constants
   use data_io,    only: station_t, source_t, eop_table_t
@@ -18,7 +15,7 @@ module scheduler
   public :: scan_t, make_schedule
 
   type :: scan_t
-    real(dp) :: mjd = 0.0_dp             ! scan epoch (UTC)
+    real(dp) :: mjd = 0.0_dp             ! epoch (UTC)
     integer  :: source = 0               ! index into the source list
     integer, allocatable :: stations(:)  ! indices of the observing stations
   end type scan_t
@@ -42,7 +39,7 @@ contains
     integer  :: n_slots, n_scans, slot, i, j, best
 
     cutoff  = cutoff_deg * deg2rad
-    n_slots = int(duration_h * 60.0_dp / interval_min + 1.0e-9_dp)
+    n_slots = int(duration_h * 60.0_dp / interval_min + 1.0e-9_dp)   ! keeps 479.999... from rounding down
     allocate(slots(n_slots))
 
     do i = 1, size(stations)
@@ -70,7 +67,7 @@ contains
           best_vis   = vis
         end if
       end do
-      if (best == 0) cycle               ! no source seen by two stations: leave the slot empty
+      if (best == 0) cycle               ! no source visible to two stations: the slot stays empty
 
       n_scans = n_scans + 1
       slots(n_scans)%mjd      = t
@@ -82,7 +79,7 @@ contains
     scans = slots(1:n_scans)
   end subroutine make_schedule
 
-  ! Which stations see direction k_trs above the elevation cutoff
+  ! which stations see direction k_trs above the elevation cutoff
   function visible(up, k_trs, cutoff) result(vis)
     real(dp), intent(in) :: up(:, :), k_trs(3), cutoff
     logical :: vis(size(up, 2))

@@ -1,21 +1,14 @@
-! main_vlbi_session.f90
 ! Milestone 1: simulate a 24-hour VLBI session and estimate the five EOP.
 !
-!   1. read the settings (Fortran namelist) and the input catalogs
-!   2. schedule the scans
-!   3. for every observation compute the partial derivatives and the
-!      noise-free observed-minus-computed delay (O-C):
-!        observed  geometric delay with the true EOP (a priori + injected offsets)
-!                  plus the clock difference of the two stations
-!        computed  geometric delay with the a priori EOP, clocks zero
-!   4. noise-free check: the adjustment must return the injected truth
-!   5. Monte Carlo: add white noise, estimate, repeat, and compare the scatter
-!      of the estimates with their formal errors
+! Observed delay: the geometric delay with the true EOP (a priori plus injected
+! offsets) plus the clock difference of the two stations. Computed delay: the
+! same with the a priori EOP and no clocks. The adjustment is checked twice:
+! without noise it must return the injected truth, and over many noise
+! realisations the scatter of the estimates must match their formal errors.
 !
-! Parameter vector x:
-!   x(1:5)  EOP corrections: xp, yp [uas], UT1-UTC [us], dX, dY [uas]
-!   then, for every station except the clock reference: clock offset [ps],
-!   rate [ps/h] and quadratic term [ps/h^2], time counted from mid-session
+! Parameters: x(1:5) = xp, yp [uas], UT1-UTC [us], dX, dY [uas], followed by an
+! offset [ps], rate [ps/h] and quadratic term [ps/h^2] for every station except
+! the clock reference, with time counted from mid-session.
 !
 ! Usage:  ./vlbi_session [settings file]          (default: config/session.nml)
 
@@ -29,7 +22,7 @@ program vlbi_session
   use lsq
   implicit none
 
-  ! ---------- settings: namelist /session/ ----------
+  ! settings, read from the namelist /session/
   integer, parameter :: max_stations = 32
   integer        :: start_year = 2026, start_month = 5, start_day = 4
   integer        :: start_hour = 17, start_minute = 0
@@ -52,25 +45,23 @@ program vlbi_session
                      sigma_delay_ps, n_monte_carlo, seed,                         &
                      station_file, source_file, eop_file, output_dir
 
-  ! EOP report units (uas, us) to SI units (rad, s)
+  ! EOP in report units (uas, us) to SI units (rad, s)
   real(dp),     parameter :: unit_to_si(n_eop) = [uas2rad, uas2rad, us2s, uas2rad, uas2rad]
   character(5), parameter :: unit_label(n_eop) = ['[uas]', '[uas]', '[us] ', '[uas]', '[uas]']
 
-  ! ---------- data ----------
   type(station_t), allocatable :: stations(:)
   type(source_t),  allocatable :: sources(:)
   type(eop_table_t)            :: eop_table
   type(scan_t),    allocatable :: scans(:)
   real(dp) :: mjd_start, mjd_mid
 
-  ! ---------- parameters and observations ----------
   integer  :: n_sta, n_par, n_obs, i_ref
   integer,  allocatable :: clock_col(:)      ! first clock column of each station, 0 for the reference
   real(dp), allocatable :: clock_true(:, :)  ! simulated clock polynomial of each station
   real(dp), allocatable :: x_true(:)         ! simulated truth of all parameters
-  real(dp), allocatable :: at(:, :)          ! design matrix A stored transposed: column k holds
-                                             ! the partials of observation k (contiguous in memory)
-  real(dp), allocatable :: oc_true(:)        ! noise-free O-C [ps]
+  real(dp), allocatable :: at(:, :)          ! design matrix A, transposed so that the partials
+                                             ! of observation k (column k) are contiguous
+  real(dp), allocatable :: oc_true(:)        ! noise-free observed minus computed [ps]
   integer,  allocatable :: obs_scan(:), obs_sta(:, :)
   real(dp) :: weight                         ! 1 / sigma^2, the same for every delay
 
@@ -119,7 +110,10 @@ contains
     weight    = 1.0_dp / sigma_delay_ps**2
   end subroutine read_settings
 
-  ! Parameter layout and the simulated truth.
+  ! Parameter layout and simulated truth. VLBI only sees clock differences, so a
+  ! clock offset common to all stations cannot be estimated: one clock is held
+  ! fixed as the reference, and every other station gets an offset, a rate and
+  ! a quadratic term.
   subroutine setup_parameters()
     integer :: i
 
@@ -129,9 +123,6 @@ contains
     end do
     if (i_ref == 0) call fail('clock_reference ' // trim(clock_reference) // ' is not in station_names')
 
-    ! VLBI observes only clock differences between stations, so a clock offset
-    ! common to all stations cannot be estimated. One clock is held fixed (the
-    ! reference); every other station gets an offset, a rate and a quadratic term.
     allocate(clock_col(n_sta))
     n_par = n_eop
     do i = 1, n_sta
@@ -143,7 +134,6 @@ contains
       end if
     end do
 
-    ! simulated truth: the injected EOP offsets and random clock polynomials
     call seed_random(seed)
     allocate(clock_true(3, n_sta), x_true(n_par))
     clock_true = 0.0_dp
@@ -157,14 +147,13 @@ contains
     end do
   end subroutine setup_parameters
 
-  ! Partial derivatives and noise-free O-C for every baseline of every scan.
+  ! Partials and noise-free O-C for every baseline (pair of stations) in every scan
   subroutine build_observations()
     real(dp) :: eop_apriori(n_eop), eop_true(n_eop), r_apriori(3, 3), r_true(3, 3)
     real(dp) :: dr(3, 3, n_eop), k_crs(3), k_apriori(3), k_true(3), dk(3, n_eop)
     real(dp) :: r1(3), r2(3), th, tau_apriori, tau_true
     integer  :: s, m, i, j, i1, i2, p, k
 
-    ! every pair of stations in a scan forms one baseline, i.e. one delay
     n_obs = 0
     do s = 1, size(scans)
       m = size(scans(s)%stations)
@@ -175,14 +164,13 @@ contains
 
     k = 0
     do s = 1, size(scans)
-      ! Earth orientation at the scan epoch: a priori (C04) and truth (a priori + offsets)
       eop_apriori = interpolate_eop(eop_table, scans(s)%mjd)
       eop_true    = eop_apriori + injected_eop * unit_to_si
       r_apriori   = c2t_matrix(scans(s)%mjd, eop_apriori)
       r_true      = c2t_matrix(scans(s)%mjd, eop_true)
       dr          = rotation_partials(scans(s)%mjd, eop_apriori)
 
-      ! source direction in the terrestrial frame, and its derivative w.r.t. each EOP
+      ! source direction in the terrestrial frame and its derivative for each EOP
       k_crs     = source_vector(sources(scans(s)%source)%ra, sources(scans(s)%source)%dec)
       k_apriori = matmul(r_apriori, k_crs)
       k_true    = matmul(r_true, k_crs)
@@ -205,11 +193,10 @@ contains
           tau_true    = geometric_delay(r1, r2, k_true)
           oc_true(k)  = (tau_true - tau_apriori) * s2ps + clock(i2, th) - clock(i1, th)
 
-          ! EOP partials: the delay formula applied to the derivative of the direction
+          ! the delay is linear in the direction, so applying it to dk gives the EOP partials
           do p = 1, n_eop
             at(p, k) = geometric_delay(r1, r2, dk(:, p)) * s2ps * unit_to_si(p)
           end do
-          ! clock partials: station 2 enters with +, station 1 with -
           call add_clock_partials(at(:, k), i2, +1.0_dp, th)
           call add_clock_partials(at(:, k), i1, -1.0_dp, th)
         end do
@@ -217,24 +204,25 @@ contains
     end do
   end subroutine build_observations
 
-  ! Simulated clock error of station i [ps], th hours from mid-session
+  ! simulated clock error of station i [ps], th hours from mid-session
   real(dp) function clock(i, th)
     integer,  intent(in) :: i
     real(dp), intent(in) :: th
     clock = clock_true(1, i) + clock_true(2, i) * th + clock_true(3, i) * th**2
   end function clock
 
+  ! the second station of a baseline enters with sgn = +1, the first with -1
   subroutine add_clock_partials(column, i, sgn, th)
     real(dp), intent(inout) :: column(:)
     integer,  intent(in)    :: i
     real(dp), intent(in)    :: sgn, th
     integer :: c
     c = clock_col(i)
-    if (c == 0) return                 ! reference clock: not estimated
+    if (c == 0) return                 ! the reference clock is not estimated
     column(c:c + 2) = column(c:c + 2) + sgn * [1.0_dp, th, th**2]
   end subroutine add_clock_partials
 
-  ! Least-squares solution for the reduced observations oc [ps].
+  ! least-squares solution for the reduced observations oc [ps]
   subroutine solve(oc, x, q, sigma0)
     real(dp), intent(in)  :: oc(:)
     real(dp), intent(out) :: x(:), q(:, :), sigma0
@@ -249,10 +237,9 @@ contains
     sigma0 = sqrt(neq_vtpv(neq, x) / (n_obs - n_par))
   end subroutine solve
 
-  ! Without noise the adjustment must return the injected truth, up to the
-  ! rounding of double precision. This tests the delay model, the partials and
-  ! the solver together. Deviations are measured in units of the formal error
-  ! sqrt(q_ii), i.e. against the statistical uncertainty of each parameter.
+  ! Without noise the adjustment must return the injected truth, up to rounding.
+  ! This tests the delay model, the partials and the solver together. The
+  ! deviations are measured in units of the formal error sqrt(q_ii).
   subroutine noise_free_check()
     real(dp) :: x(n_par), q(n_par, n_par), sigma0, dev(n_par)
     integer  :: p
@@ -291,8 +278,6 @@ contains
     call print_monte_carlo(err, formal, sigma0_run)
     call write_monte_carlo(err, sigma0_run)
   end subroutine monte_carlo
-
-  ! ---------- report ----------
 
   subroutine print_session()
     character(512) :: line
@@ -345,7 +330,7 @@ contains
             x(c + 2) - x_true(c + 2), formal(c + 2)
     end do
 
-    ! correlation coefficients of the EOP estimates, from the cofactor matrix
+    ! correlations of the EOP estimates, from the cofactor matrix
     do r = 1, n_eop
       do p = 1, n_eop
         corr(r, p) = q(r, p) / sqrt(q(r, r) * q(p, p))
@@ -375,8 +360,6 @@ contains
     end do
     print '(2x, a, f5.3)', 'Mean sigma0 ', sum(sigma0_run) / n
   end subroutine print_monte_carlo
-
-  ! ---------- output files ----------
 
   subroutine write_schedule()
     character(512) :: line
@@ -431,8 +414,6 @@ contains
     write(text, '(i4.4, "-", i2.2, "-", i2.2, 1x, i2.2, ":", i2.2)') iy, im, id, minutes / 60, mod(minutes, 60)
   end function utc_string
 
-  ! ---------- random numbers ----------
-
   subroutine seed_random(seed_value)
     integer, intent(in) :: seed_value
     integer, allocatable :: s(:)
@@ -443,7 +424,7 @@ contains
     call random_seed(put=s)
   end subroutine seed_random
 
-  ! Standard normal random number (Box-Muller transform)
+  ! standard normal random number (Box-Muller)
   function gauss() result(g)
     real(dp) :: g, u1, u2
     call random_number(u1)
