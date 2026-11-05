@@ -100,7 +100,6 @@ results/                    output of make run
 - **SOFA**: IAU Standards of Fundamental Astronomy, https://www.iausofa.org. This project calls SOFA routines and is not itself SOFA software. The library is built locally and not included here.
 - **IERS EOP 20 C04**: IERS Earth Orientation Center, Paris Observatory, https://hpiers.obspm.fr/iers/eop/eopc04/eopc04.1962-now. `data/eopc04_2026-05.txt` is an extract.
 - **IVS scheduling catalogs**: https://github.com/nvi-inc/sked_catalogs, source of `data/position.cat` (extract) and `data/source.cat.geodetic.good` (unchanged copy).
-- Developed with AI assistance (Claude, Anthropic).
 
 ## Roadmap
 
